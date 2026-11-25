@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Review match results, performance, and rating changes over time.">
+    <title>Matchlog | Game progress tracker</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --ink: #17231f;
+        --muted: #6b7771;
+        --line: #e6ebe7;
+        --paper: #ffffff;
+        --canvas: #f5f7f4;
+        --green: #17684d;
+        --green-dark: #124e3b;
+        --green-soft: #e8f4ed;
+        --red: #a44c48;
+        --red-soft: #faeeec;
+        --gold: #d7ad61;
+        --activity-cell: #edf1ed;
+        --activity-loss: #cf514c;
+        --activity-low: #d68c4e;
+        --activity-mid: #d1b14d;
+        --activity-high: #82b568;
+        --activity-win: #38a765;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      .page-shell {
+        width: min(1120px, calc(100% - 48px));
+        margin: 0 auto;
+        padding: 28px 0 56px;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 11px;
+        color: var(--ink);
+        font-size: 15px;
+        font-weight: 750;
+        letter-spacing: -0.035em;
+        text-decoration: none;
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border-radius: 11px;
+        background: #123d33;
+        color: white;
+        font-size: 17px;
+        font-weight: 800;
+      }
+
+      .sample-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 11px;
+        border: 1px solid #dce5de;
+        border-radius: 999px;
+        background: #fff;
+        color: #53635a;
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .sample-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--gold);
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .stat-card {
+        min-height: 72px;
+        padding: 11px 14px;
+        border: 1px solid #252a27;
+        border-radius: 9px;
+        background: #171a18;
+        color: #f3f5f2;
+      }
+
+      .summary-line,
+      .summary-main {
+        display: flex;
+        align-items: baseline;
+      }
+
+      .summary-line {
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .summary-main {
+        gap: 5px;
+      }
+
+      .stat-value {
+        font-size: 20px;
+        font-weight: 750;
+        letter-spacing: -0.045em;
+        line-height: 1;
+        white-space: nowrap;
+      }
+
+      .match-count {
+        color: #e1c44e;
+      }
+
+      .win-rate-value {
+        color: #ef5551;
+      }
+
+      .summary-label {
+        color: #e8ebe8;
+        font-size: 12px;
+        font-weight: 650;
+        white-space: nowrap;
+      }
+
+      .first-match {
+        color: #a4aba6;
+        font-size: 10px;
+        text-align: right;
+        white-space: nowrap;
+      }
+
+      .win-record {
+        display: flex;
+        align-items: baseline;
+        gap: 4px;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .record-win {
+        color: #79c66c;
+      }
+
+      .record-loss {
+        color: #ef5551;
+      }
+
+      .record-divider {
+        color: #929a95;
+        font-weight: 500;
+      }
+
+      .match-activity {
+        height: 4px;
+        margin-top: 10px;
+        border-radius: 4px;
+        background: repeating-linear-gradient(90deg, #d7bd48 0 10px, #292d2a 10px 13px);
+      }
+
+      .win-rate-track {
+        height: 5px;
+        margin-top: 10px;
+        overflow: hidden;
+        border-radius: 5px;
+        background: #343936;
+      }
+
+      .win-rate-fill {
+        display: block;
+        width: 0;
+        height: 100%;
+        border-radius: inherit;
+        background: #df4f4b;
+        transition: width 180ms ease;
+      }
+
+      .content-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 270px;
+        gap: 18px;
+        align-items: start;
+      }
+
+      .main-column {
+        display: grid;
+        min-width: 0;
+        gap: 18px;
+      }
+
+      .panel {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--paper);
+      }
+
+      .panel-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 20px 21px 16px;
+      }
+
+      h1,
+      h2 {
+        margin: 0;
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: -0.025em;
+      }
+
+      .panel-subtitle {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .filters {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 150px;
+        align-items: center;
+        gap: 10px;
+        padding: 0 21px 17px;
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+      }
+
+      .field {
+        width: 100%;
+        min-width: 0;
+        height: 42px;
+        padding: 0 11px;
+        border: 1px solid #dfe5e1;
+        border-radius: 9px;
+        outline: none;
+        background: #fff;
+        color: var(--ink);
+        font-size: 12px;
+      }
+
+      .field:focus {
+        border-color: #75a88e;
+        box-shadow: 0 0 0 3px rgb(23 104 77 / 10%);
+      }
+
+      .search-field {
+        display: block;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+      }
+
+      thead {
+        background: #f8faf8;
+      }
+
+      th {
+        padding: 10px 14px;
+        color: #849089;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+
+      th:first-child,
+      td:first-child {
+        padding-left: 21px;
+      }
+
+      th:last-child,
+      td:last-child {
+        padding-right: 21px;
+      }
+
+      td {
+        padding: 14px;
+        border-top: 1px solid #edf0ed;
+        color: #536059;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .match-name {
+        display: block;
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .match-note {
+        display: block;
+        max-width: 195px;
+        overflow: hidden;
+        margin-top: 3px;
+        color: #89938e;
+        font-size: 11px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .result-pill {
+        display: inline-flex;
+        padding: 4px 8px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 700;
+      }
+
+      .result-pill.win {
+        background: var(--green-soft);
+        color: var(--green);
+      }
+
+      .result-pill.loss {
+        background: var(--red-soft);
+        color: var(--red);
+      }
+
+      .performance {
+        color: var(--ink);
+        font-weight: 650;
+      }
+
+      .rating-change {
+        display: block;
+        font-weight: 700;
+      }
+
+      .rating-change.positive {
+        color: var(--green);
+      }
+
+      .rating-change.negative {
+        color: var(--red);
+      }
+
+      .rating-total {
+        display: block;
+        margin-top: 2px;
+        color: #89938e;
+        font-size: 10px;
+      }
+
+      .empty-row {
+        padding: 28px 20px;
+        color: var(--muted);
+        text-align: center;
+      }
+
+      .table-foot {
+        padding: 12px 21px;
+        border-top: 1px solid #edf0ed;
+        color: #89938e;
+        font-size: 11px;
+      }
+
+      .side-column {
+        display: grid;
+        gap: 14px;
+      }
+
+      .practice-card {
+        padding: 20px;
+        border: 1px solid #dce9df;
+        border-radius: 16px;
+        background: #edf5ef;
+      }
+
+      .practice-icon {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        margin-bottom: 15px;
+        place-items: center;
+        border-radius: 11px;
+        background: #d8eadc;
+        color: var(--green-dark);
+        font-size: 17px;
+        font-weight: 800;
+      }
+
+      .practice-card h2 {
+        font-size: 15px;
+      }
+
+      .practice-card p {
+        margin: 8px 0 0;
+        color: #5f7065;
+        font-size: 12px;
+        line-height: 1.65;
+      }
+
+      .rating-card {
+        padding: 18px 20px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--paper);
+      }
+
+      .rating-card h2 {
+        font-size: 14px;
+      }
+
+      .chart-summary {
+        margin: 5px 0 0;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .rating-chart {
+        display: block;
+        width: 100%;
+        height: auto;
+        margin-top: 9px;
+        overflow: visible;
+      }
+
+      .chart-grid-line {
+        stroke: #edf0ed;
+        stroke-width: 1;
+      }
+
+      .rating-line {
+        fill: none;
+        stroke: var(--green);
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 3;
+      }
+
+      .rating-point {
+        fill: #fff;
+        stroke: var(--green);
+        stroke-width: 2;
+      }
+
+      .chart-date {
+        fill: #89938e;
+        font-family: inherit;
+        font-size: 10px;
+      }
+
+      .type-mix {
+        display: grid;
+        grid-template-columns: 112px minmax(0, 1fr);
+        align-items: center;
+        gap: 14px;
+        margin-top: 13px;
+      }
+
+      .type-chart {
+        display: block;
+        width: 112px;
+        height: 112px;
+      }
+
+      .type-track,
+      .type-slice {
+        fill: none;
+        stroke-width: 18;
+      }
+
+      .type-track {
+        stroke: #edf1ed;
+      }
+
+      .type-center-count {
+        fill: var(--ink);
+        font-family: inherit;
+        font-size: 17px;
+        font-weight: 700;
+        text-anchor: middle;
+      }
+
+      .type-center-label {
+        fill: #89938e;
+        font-family: inherit;
+        font-size: 8px;
+        text-anchor: middle;
+      }
+
+      .type-legend {
+        display: grid;
+        gap: 10px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .type-legend li {
+        display: grid;
+        grid-template-columns: 8px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 7px;
+        color: #647069;
+        font-size: 10px;
+      }
+
+      .type-legend strong {
+        color: var(--ink);
+        font-size: 10px;
+      }
+
+      .type-legend-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+      }
+
+      .activity-card {
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--paper);
+      }
+
+      .activity-heading {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .activity-heading h2 {
+        font-size: 14px;
+      }
+
+      .activity-count,
+      .activity-range {
+        color: var(--muted);
+        font-size: 10px;
+        white-space: nowrap;
+      }
+
+      .activity-range {
+        display: block;
+        margin-top: 3px;
+      }
+
+      .activity-grid {
+        display: grid;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        gap: 4px;
+        margin-top: 10px;
+      }
+
+      .activity-cell {
+        display: grid;
+        min-width: 0;
+        aspect-ratio: 1;
+        place-items: center;
+        border-radius: 3px;
+        background: var(--activity-cell);
+      }
+
+      .activity-dot {
+        display: block;
+        border-radius: 2px;
+      }
+
+      .activity-dot.rate-loss {
+        background: var(--activity-loss);
+      }
+
+      .activity-dot.rate-low {
+        background: var(--activity-low);
+      }
+
+      .activity-dot.rate-mid {
+        background: var(--activity-mid);
+      }
+
+      .activity-dot.rate-high {
+        background: var(--activity-high);
+      }
+
+      .activity-dot.rate-win {
+        background: var(--activity-win);
+      }
+
+      .activity-legend {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 9px;
+      }
+
+      .activity-scale {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .activity-key-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 2px;
+      }
+
+      .activity-key-dot.rate-loss {
+        background: var(--activity-loss);
+      }
+
+      .activity-key-dot.rate-mid {
+        background: var(--activity-mid);
+      }
+
+      .activity-key-dot.rate-win {
+        background: var(--activity-win);
+      }
+
+      .chart-empty {
+        padding: 20px 0;
+        color: var(--muted);
+        font-size: 11px;
+        text-align: center;
+      }
+
+      .demo-note {
+        margin: 19px 2px 0;
+        color: #8a948e;
+        font-size: 11px;
+        line-height: 1.6;
+      }
+
+      @media (max-width: 850px) {
+        .content-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .side-column {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 620px) {
+        .page-shell {
+          width: min(100% - 30px, 540px);
+          padding-top: 18px;
+        }
+
+        .topbar {
+          margin-bottom: 14px;
+        }
+
+        .stats {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 10px;
+        }
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --ink: #e7eee8;
+          --muted: #a2aea5;
+          --line: #2d3731;
+          --paper: #171d19;
+          --canvas: #101511;
+          --green: #83d7a8;
+          --green-dark: #a2e3bd;
+          --green-soft: #1d3929;
+          --red: #ff9a91;
+          --red-soft: #402725;
+          --gold: #dfc35a;
+          --activity-cell: #252c27;
+          --activity-loss: #e35f58;
+          --activity-low: #e39b5a;
+          --activity-mid: #e0c65c;
+          --activity-high: #9acb74;
+          --activity-win: #4bc27a;
+        }
+
+        .sample-label {
+          border-color: #303a33;
+          background: var(--paper);
+          color: #c1ccc4;
+        }
+
+        .stat-card {
+          border-color: #303a33;
+          background: #1a201c;
+          color: #e7eee8;
+        }
+
+        .summary-label {
+          color: #e7eee8;
+        }
+
+        .first-match {
+          color: #a8b3ab;
+        }
+
+        .record-win {
+          color: #8bd68a;
+        }
+
+        .record-loss,
+        .win-rate-value {
+          color: #ff827b;
+        }
+
+        .match-activity {
+          background: repeating-linear-gradient(90deg, #dfc35a 0 10px, #303731 10px 13px);
+        }
+
+        .win-rate-track {
+          background: #353d37;
+        }
+
+        .field {
+          border-color: #3a453d;
+          background: #171d19;
+          color: var(--ink);
+        }
+
+        .field:focus {
+          border-color: #83d7a8;
+          box-shadow: 0 0 0 3px rgb(131 215 168 / 14%);
+        }
+
+        thead {
+          background: #202722;
+        }
+
+        th,
+        .match-note,
+        .rating-total,
+        .table-foot,
+        .chart-date,
+        .type-center-label {
+          color: #9eaaa2;
+        }
+
+        td {
+          border-color: #29312c;
+          color: #bec8c0;
+        }
+
+        .practice-card {
+          border-color: #2b4935;
+          background: #19271e;
+        }
+
+        .practice-icon {
+          background: #263d2d;
+          color: #a2e3bd;
+        }
+
+        .practice-card p {
+          color: #b6c6b9;
+        }
+
+        .chart-grid-line {
+          stroke: #2b342e;
+        }
+
+        .rating-point {
+          fill: var(--paper);
+        }
+
+        .type-track {
+          stroke: #2a342c;
+        }
+
+        .activity-card {
+          border-color: #2d3731;
+          background: #171d19;
+        }
+
+        .type-legend li {
+          color: #aeb9b1;
+        }
+
+        .demo-note {
+          color: #9eaaa2;
+        }
+      }
+
+      @media (max-width: 620px) {
+        .panel-heading {
+          align-items: start;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .filters {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .search-field,
+        .select-field {
+          width: 100%;
+        }
+
+        .side-column {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Matchlog home">
+          <span class="brand-mark" aria-hidden="true">M</span>
+          <span>matchlog</span>
+        </a>
+        <span class="sample-label"><span class="sample-dot" aria-hidden="true"></span>Sample data</span>
+      </header>
+
+      <div class="content-grid">
+        <div class="main-column">
+          <section class="stats" aria-label="Match summary">
+            <article class="stat-card">
+              <div class="summary-line">
+                <div class="summary-main">
+                  <strong class="stat-value match-count" id="matches-count">--</strong>
+                  <span class="summary-label" id="matches-label">Matches</span>
+                </div>
+                <span class="first-match" id="first-match">First Match: --</span>
+              </div>
+              <div class="match-activity" aria-hidden="true"></div>
+            </article>
+            <article class="stat-card">
+              <div class="summary-line">
+                <div class="summary-main">
+                  <strong class="stat-value win-rate-value" id="win-rate">--</strong>
+                  <span class="summary-label">Win Rate</span>
+                </div>
+                <div class="win-record" id="win-loss-record" aria-label="Match record">
+                  <span class="record-win" id="wins-count">--</span>
+                  <span class="record-divider" aria-hidden="true">-</span>
+                  <span class="record-loss" id="losses-count">--</span>
+                </div>
+              </div>
+              <div
+                class="win-rate-track"
+                id="win-rate-progress"
+                role="progressbar"
+                aria-label="Win rate"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="0"
+                aria-valuetext="No matches"
+              >
+                <span class="win-rate-fill" id="win-rate-fill"></span>
+              </div>
+            </article>
+          </section>
+
+          <section class="panel" aria-labelledby="matches-heading">
+            <div class="panel-heading">
+              <div>
+                <h1 id="matches-heading">Match history</h1>
+                <p class="panel-subtitle">A little context goes a long way.</p>
+              </div>
+            </div>
+
+            <form class="filters" id="filters-form">
+              <label class="sr-only" for="match-search">Search match mode or note</label>
+              <input
+                class="field search-field"
+                id="match-search"
+                name="search"
+                type="search"
+                placeholder="Search a mode or match note"
+                autocomplete="off"
+              >
+              <label class="sr-only" for="result-filter">Filter by result</label>
+              <select class="field select-field" id="result-filter" name="result">
+                <option value="all">All results</option>
+                <option value="win">Wins</option>
+                <option value="loss">Losses</option>
+              </select>
+            </form>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Match</th>
+                    <th scope="col">Date</th>
+                    <th scope="col">Result</th>
+                    <th scope="col">Performance</th>
+                    <th scope="col">Rating</th>
+                  </tr>
+                </thead>
+                <tbody id="matches-body">
+                  <tr><td class="empty-row" colspan="5">Loading matches...</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-foot" id="matches-status" role="status" aria-live="polite">Loading match history...</div>
+          </section>
+        </div>
+
+        <aside class="side-column" aria-label="Trends and progress">
+          <section class="rating-card">
+            <h2>Trends</h2>
+            <p class="chart-summary">MMR over time</p>
+            <p class="chart-summary" id="rating-summary">Loading rating history...</p>
+            <svg class="rating-chart" viewBox="0 0 250 130" role="img" aria-labelledby="rating-chart-title">
+              <title id="rating-chart-title">Rating changes over time</title>
+              <line class="chart-grid-line" x1="26" y1="20" x2="240" y2="20"></line>
+              <line class="chart-grid-line" x1="26" y1="57" x2="240" y2="57"></line>
+              <line class="chart-grid-line" x1="26" y1="94" x2="240" y2="94"></line>
+              <polyline class="rating-line" id="rating-line" points=""></polyline>
+              <g id="rating-points"></g>
+              <text class="chart-date" id="rating-start-date" x="26" y="117"></text>
+              <text class="chart-date" id="rating-end-date" x="240" y="117" text-anchor="end"></text>
+            </svg>
+          </section>
+          <section class="rating-card">
+            <h2>Queue type mix</h2>
+            <p class="chart-summary" id="type-summary">Breakdown of matches in this view</p>
+            <div class="type-mix">
+              <svg class="type-chart" viewBox="0 0 112 112" role="img" aria-labelledby="type-chart-title">
+                <title id="type-chart-title">Queue types in the visible matches</title>
+                <circle class="type-track" cx="56" cy="56" r="42"></circle>
+                <g id="type-slices" transform="rotate(-90 56 56)"></g>
+                <text class="type-center-count" id="type-total" x="56" y="54">0</text>
+                <text class="type-center-label" x="56" y="68">matches</text>
+              </svg>
+              <ul class="type-legend" id="type-legend"></ul>
+            </div>
+          </section>
+          <section class="activity-card" aria-labelledby="activity-title">
+            <div class="activity-heading">
+              <h2 id="activity-title">Activity: <span id="activity-level">Loading</span></h2>
+              <span class="activity-count" id="activity-count">-- Matches</span>
+            </div>
+            <p class="activity-range" id="activity-range">Last 12 weeks</p>
+            <div class="activity-grid" id="activity-grid" role="group" aria-label="Daily match activity"></div>
+            <div class="activity-legend">
+              <span>Win rate</span>
+              <span class="activity-scale" aria-label="Red is 0%, yellow is 50%, green is 100%">
+                <span class="activity-key-dot rate-loss" aria-hidden="true"></span>0%
+                <span class="activity-key-dot rate-mid" aria-hidden="true"></span>50%
+                <span class="activity-key-dot rate-win" aria-hidden="true"></span>100%
+              </span>
+              <span>Dot size = matches per day</span>
+            </div>
+          </section>
+          <section class="practice-card">
+            <span class="practice-icon" aria-hidden="true">↗</span>
+            <h2>Practice next</h2>
+            <p>Review your rotation timing. The sample loss included a late rotation, so try planning your next move earlier.</p>
+          </section>
+        </aside>
+      </div>
+
+      <p class="demo-note">These made-up practice records are stored in your project database.</p>
+    </main>
+
+    <script>
+      const matchesBody = document.getElementById("matches-body");
+      const matchesStatus = document.getElementById("matches-status");
+      const searchInput = document.getElementById("match-search");
+      const resultFilter = document.getElementById("result-filter");
+      const ratingLine = document.getElementById("rating-line");
+      const ratingPoints = document.getElementById("rating-points");
+      const typeSlices = document.getElementById("type-slices");
+      const typeLegend = document.getElementById("type-legend");
+      const numberFormat = new Intl.NumberFormat("en-US");
+      const typeColors = ["#17684d", "#d7ad61", "#6b8eb6", "#a478ac"];
+      let matches = [];
+      let matchesRequest = 0;
+      let searchTimeout;
+
+      function formatDate(dateString) {
+        const date = new Date(`${dateString}T12:00:00`);
+        return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date);
+      }
+
+      function formatLongDate(dateString) {
+        const date = new Date(`${dateString}T12:00:00`);
+        return new Intl.DateTimeFormat("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric"
+        }).format(date);
+      }
+
+      function signedNumber(value) {
+        return `${value >= 0 ? "+" : ""}${numberFormat.format(value)}`;
+      }
+
+      function appendCell(row, value, className) {
+        const cell = document.createElement("td");
+        if (className) {
+          cell.className = className;
+        }
+        cell.textContent = value;
+        row.append(cell);
+        return cell;
+      }
+
+      function renderMatch(match) {
+        const row = document.createElement("tr");
+
+        const matchCell = document.createElement("td");
+        const matchName = document.createElement("span");
+        matchName.className = "match-name";
+        matchName.textContent = match.mode;
+        const matchNote = document.createElement("span");
+        matchNote.className = "match-note";
+        matchNote.textContent = match.note;
+        matchCell.append(matchName, matchNote);
+        row.append(matchCell);
+
+        appendCell(row, formatDate(match.playedOn));
+
+        const resultCell = document.createElement("td");
+        const result = document.createElement("span");
+        result.className = `result-pill ${match.result}`;
+        result.textContent = match.result === "win" ? "Win" : "Loss";
+        resultCell.append(result);
+        row.append(resultCell);
+
+        appendCell(row, `${match.performance.toFixed(1)} / 10`, "performance");
+
+        const ratingCell = document.createElement("td");
+        const change = document.createElement("span");
+        change.className = `rating-change ${match.ratingChange >= 0 ? "positive" : "negative"}`;
+        change.textContent = signedNumber(match.ratingChange);
+        const total = document.createElement("span");
+        total.className = "rating-total";
+        total.textContent = `MMR ${numberFormat.format(match.ratingBefore)} → ${numberFormat.format(match.ratingAfter)}`;
+        ratingCell.append(change, total);
+        row.append(ratingCell);
+
+        return row;
+      }
+
+      function updateSummary(visibleMatches) {
+        const wins = visibleMatches.filter((match) => match.result === "win").length;
+        const losses = visibleMatches.length - wins;
+        const winRate = visibleMatches.length ? (wins / visibleMatches.length) * 100 : 0;
+        const firstMatch = visibleMatches.reduce((earliest, match) => (
+          !earliest || match.playedOn < earliest.playedOn ? match : earliest
+        ), null);
+
+        document.getElementById("matches-count").textContent = numberFormat.format(visibleMatches.length);
+        document.getElementById("matches-label").textContent = visibleMatches.length === 1 ? "Match" : "Matches";
+        document.getElementById("first-match").textContent = firstMatch
+          ? `First Match: ${formatLongDate(firstMatch.playedOn)}`
+          : "First Match: --";
+        document.getElementById("win-rate").textContent = visibleMatches.length
+          ? `${winRate.toFixed(2)}%`
+          : "--";
+        document.getElementById("wins-count").textContent = numberFormat.format(wins);
+        document.getElementById("losses-count").textContent = numberFormat.format(losses);
+
+        const record = document.getElementById("win-loss-record");
+        record.setAttribute("aria-label", `${wins} wins, ${losses} ${losses === 1 ? "loss" : "losses"}`);
+        const progress = document.getElementById("win-rate-progress");
+        progress.setAttribute("aria-valuenow", winRate.toFixed(2));
+        progress.setAttribute(
+          "aria-valuetext",
+          visibleMatches.length ? `${winRate.toFixed(2)}% win rate` : "No matches"
+        );
+        document.getElementById("win-rate-fill").style.width = `${winRate}%`;
+      }
+
+      function updateRatingChart(visibleMatches) {
+        const orderedMatches = [...visibleMatches].sort((first, second) => (
+          first.playedOn.localeCompare(second.playedOn)
+        ));
+        const ratingSummary = document.getElementById("rating-summary");
+        const chartTitle = document.getElementById("rating-chart-title");
+        const startDate = document.getElementById("rating-start-date");
+        const endDate = document.getElementById("rating-end-date");
+
+        ratingPoints.replaceChildren();
+        if (!orderedMatches.length) {
+          ratingLine.setAttribute("points", "");
+          ratingSummary.textContent = "No rating data for these filters.";
+          chartTitle.textContent = "No rating data for the selected matches.";
+          startDate.textContent = "";
+          endDate.textContent = "";
+          return;
+        }
+
+        const ratings = [
+          orderedMatches[0].ratingBefore,
+          ...orderedMatches.map((match) => match.ratingAfter)
+        ];
+        const minimum = Math.min(...ratings);
+        const maximum = Math.max(...ratings);
+        const pointCoordinates = ratings.map((rating, index) => {
+          const x = 26 + (index * 214) / (ratings.length - 1);
+          const y = maximum === minimum
+            ? 57
+            : 94 - ((rating - minimum) / (maximum - minimum)) * 74;
+          return { x, y, rating };
+        });
+
+        ratingLine.setAttribute(
+          "points",
+          pointCoordinates.map((point) => `${point.x},${point.y}`).join(" ")
+        );
+        pointCoordinates.forEach((point) => {
+          const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          circle.setAttribute("class", "rating-point");
+          circle.setAttribute("cx", point.x);
+          circle.setAttribute("cy", point.y);
+          circle.setAttribute("r", "3.5");
+          ratingPoints.append(circle);
+        });
+
+        const firstRating = ratings[0];
+        const lastRating = ratings[ratings.length - 1];
+        ratingSummary.textContent = `${numberFormat.format(firstRating)} → ${numberFormat.format(lastRating)} MMR · ${signedNumber(lastRating - firstRating)}`;
+        chartTitle.textContent = `Rating changed from ${numberFormat.format(firstRating)} to ${numberFormat.format(lastRating)} across ${orderedMatches.length} matches.`;
+        startDate.textContent = formatDate(orderedMatches[0].playedOn);
+        endDate.textContent = formatDate(orderedMatches[orderedMatches.length - 1].playedOn);
+      }
+
+      function updateTypeChart(visibleMatches) {
+        const typeCounts = new Map();
+        visibleMatches.forEach((match) => {
+          typeCounts.set(match.mode, (typeCounts.get(match.mode) || 0) + 1);
+        });
+
+        typeSlices.replaceChildren();
+        typeLegend.replaceChildren();
+        document.getElementById("type-total").textContent = numberFormat.format(visibleMatches.length);
+        document.getElementById("type-chart-title").textContent = visibleMatches.length
+          ? `Queue type breakdown of ${visibleMatches.length} visible matches.`
+          : "No queue types for the selected matches.";
+        document.getElementById("type-summary").textContent = visibleMatches.length
+          ? "Match types in this view"
+          : "No matches for these filters";
+
+        if (!visibleMatches.length) {
+          const empty = document.createElement("li");
+          empty.className = "chart-empty";
+          empty.textContent = "No matches";
+          typeLegend.append(empty);
+          return;
+        }
+
+        const circumference = 2 * Math.PI * 42;
+        let offset = 0;
+        [...typeCounts.entries()].forEach(([type, count], index) => {
+          const segmentLength = (count / visibleMatches.length) * circumference;
+          const slice = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          slice.setAttribute("class", "type-slice");
+          slice.setAttribute("cx", "56");
+          slice.setAttribute("cy", "56");
+          slice.setAttribute("r", "42");
+          slice.setAttribute("stroke", typeColors[index % typeColors.length]);
+          slice.setAttribute("stroke-dasharray", `${segmentLength} ${circumference - segmentLength}`);
+          slice.setAttribute("stroke-dashoffset", `${-offset}`);
+          typeSlices.append(slice);
+          offset += segmentLength;
+
+          const item = document.createElement("li");
+          const dot = document.createElement("span");
+          dot.className = "type-legend-dot";
+          dot.style.backgroundColor = typeColors[index % typeColors.length];
+          const label = document.createElement("span");
+          label.textContent = type;
+          const countLabel = document.createElement("strong");
+          countLabel.textContent = numberFormat.format(count);
+          item.append(dot, label, countLabel);
+          typeLegend.append(item);
+        });
+      }
+
+      function updateActivityChart(visibleMatches) {
+        const activityGrid = document.getElementById("activity-grid");
+        const latestMatch = matches.reduce((latest, match) => (
+          !latest || match.playedOn > latest.playedOn ? match : latest
+        ), null);
+        const anchorMatch = visibleMatches.reduce((latest, match) => (
+          !latest || match.playedOn > latest.playedOn ? match : latest
+        ), null) || latestMatch;
+        const matchCount = visibleMatches.length;
+
+        document.getElementById("activity-count").textContent = `${numberFormat.format(matchCount)} ${matchCount === 1 ? "Match" : "Matches"}`;
+        document.getElementById("activity-level").textContent = matchCount === 0
+          ? "None"
+          : matchCount <= 4 ? "Light" : matchCount <= 12 ? "Medium" : "High";
+        activityGrid.replaceChildren();
+
+        if (!anchorMatch) {
+          document.getElementById("activity-range").textContent = "No match dates";
+          activityGrid.setAttribute("aria-label", "No sample match activity is available.");
+          return;
+        }
+
+        const rangeEnd = new Date(`${anchorMatch.playedOn}T12:00:00`);
+        rangeEnd.setDate(rangeEnd.getDate() + 6 - rangeEnd.getDay());
+        const rangeStart = new Date(rangeEnd);
+        rangeStart.setDate(rangeStart.getDate() - 83);
+
+        const getDateKey = (date) => (
+          `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+        );
+        document.getElementById("activity-range").textContent = `${formatDate(getDateKey(rangeStart))} - ${formatDate(getDateKey(rangeEnd))}`;
+        activityGrid.setAttribute(
+          "aria-label",
+          `Daily match activity from ${formatLongDate(getDateKey(rangeStart))} to ${formatLongDate(getDateKey(rangeEnd))}. Dot size shows matches per day; color shows win rate.`
+        );
+
+        const dailyActivity = new Map();
+        visibleMatches.forEach((match) => {
+          const activity = dailyActivity.get(match.playedOn) || { count: 0, wins: 0 };
+          activity.count += 1;
+          if (match.result === "win") {
+            activity.wins += 1;
+          }
+          dailyActivity.set(match.playedOn, activity);
+        });
+
+        for (let week = 0; week < 12; week += 1) {
+          for (let day = 0; day < 7; day += 1) {
+            const date = new Date(rangeStart);
+            date.setDate(rangeStart.getDate() + week * 7 + day);
+            const dateKey = getDateKey(date);
+            const activity = dailyActivity.get(dateKey);
+            const cell = document.createElement("span");
+            cell.className = "activity-cell";
+            cell.setAttribute("role", "img");
+
+            if (activity) {
+              const winRate = activity.wins / activity.count;
+              const rateClass = winRate === 1
+                ? "rate-win"
+                : winRate >= 0.75 ? "rate-high"
+                  : winRate >= 0.5 ? "rate-mid"
+                    : winRate >= 0.25 ? "rate-low" : "rate-loss";
+              const dotSize = Math.min(13, 5 + activity.count * 2);
+              const dot = document.createElement("span");
+              const label = `${formatLongDate(dateKey)}: ${activity.count} ${activity.count === 1 ? "match" : "matches"}, ${Math.round(winRate * 100)}% win rate`;
+              dot.className = `activity-dot ${rateClass}`;
+              dot.style.width = `${dotSize}px`;
+              dot.style.height = `${dotSize}px`;
+              cell.append(dot);
+              cell.setAttribute("aria-label", label);
+              cell.title = label;
+            } else {
+              const label = `${formatLongDate(dateKey)}: no matches`;
+              cell.setAttribute("aria-label", label);
+              cell.title = label;
+            }
+
+            activityGrid.append(cell);
+          }
+        }
+      }
+
+      function renderMatches() {
+        const visibleMatches = matches;
+
+        matchesBody.replaceChildren();
+        if (visibleMatches.length) {
+          visibleMatches.forEach((match) => matchesBody.append(renderMatch(match)));
+        } else {
+          const row = document.createElement("tr");
+          const cell = document.createElement("td");
+          cell.className = "empty-row";
+          cell.colSpan = 5;
+          cell.textContent = "No matches found for these filters.";
+          row.append(cell);
+          matchesBody.append(row);
+        }
+
+        updateSummary(visibleMatches);
+        updateRatingChart(visibleMatches);
+        updateTypeChart(visibleMatches);
+        updateActivityChart(visibleMatches);
+        matchesStatus.textContent = `${visibleMatches.length} ${visibleMatches.length === 1 ? "match" : "matches"} found.`;
+      }
+
+      async function loadMatches() {
+        const requestId = ++matchesRequest;
+        const query = new URLSearchParams({
+          search: searchInput.value.trim(),
+          result: resultFilter.value
+        });
+        matchesStatus.textContent = "Loading match history...";
+
+        try {
+          const response = await fetch(`/api/matches?${query.toString()}`);
+          if (requestId !== matchesRequest) {
+            return;
+          }
+          if (!response.ok) {
+            throw new Error(`The server returned ${response.status}.`);
+          }
+          const data = await response.json();
+          if (!Array.isArray(data)) {
+            throw new Error("The match response was not a list.");
+          }
+          if (requestId !== matchesRequest) {
+            return;
+          }
+          matches = data;
+          renderMatches();
+        } catch (error) {
+          if (requestId !== matchesRequest) {
+            return;
+          }
+          matchesBody.replaceChildren();
+          const row = document.createElement("tr");
+          const cell = document.createElement("td");
+          cell.className = "empty-row";
+          cell.colSpan = 5;
+          cell.textContent = "Could not load matches. Check that the server and database are available, then retry.";
+          row.append(cell);
+          matchesBody.append(row);
+          updateSummary([]);
+          updateRatingChart([]);
+          updateTypeChart([]);
+          updateActivityChart([]);
+          matchesStatus.textContent = `Match history could not be loaded: ${error.message}`;
+        }
+      }
+
+      document.getElementById("filters-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        clearTimeout(searchTimeout);
+        loadMatches();
+      });
+      searchInput.addEventListener("input", () => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(loadMatches, 250);
+      });
+      resultFilter.addEventListener("change", () => {
+        clearTimeout(searchTimeout);
+        loadMatches();
+      });
+      loadMatches();
+    </script>
+  </body>
+</html>
